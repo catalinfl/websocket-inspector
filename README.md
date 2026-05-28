@@ -80,7 +80,7 @@ Contributing
 - Bug reports and pull requests are welcome. Please open an issue to discuss larger changes before implementing them.
 
 License
-- Check the repository files for license details (if provided).
+- This project is licensed under the Apache License 2.0. See `LICENSE.MD` for the full text.
 
 Questions or issues
 - Open an issue in the repository or contact the project owner for specific questions.
