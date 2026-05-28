@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <link rel="stylesheet" href="./src/app.css" />
+    <link rel="stylesheet" href="./src/style.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@200..700&display=swap" />
+    <title>WebSocket Tester</title>
+</head>
+
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="brand">WebSocket Inspector</div>
+                <div class="status-pill" aria-live="polite">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+            <div class="topbar-center">
+                <label class="input-with-icon" aria-label="WebSocket endpoint">
+                    <span class="material-symbols-outlined" aria-hidden="true">link</span>
+                    <input class="input" id="websocketUrlInput" type="text" value="ws://localhost:8080" />
+                </label>
+                <button class="btn btn-primary" id="connectButton" type="button">Connect</button>
+            </div>
+            <div class="topbar-actions" aria-label="Window actions">
+                <button class="icon-btn" type="button" aria-label="Settings">
+                    <span class="material-symbols-outlined" aria-hidden="true">settings</span>
+                </button>
+                <button class="icon-btn" type="button" aria-label="Help">
+                    <span class="material-symbols-outlined" aria-hidden="true">help</span>
+                </button>
+                <button class="icon-btn" type="button" aria-label="Terminal">
+                    <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="main-row">
+            <nav class="sidenav" aria-label="Connections">
+                <div class="connections-header">
+                    <div class="connections-title">Connections</div>
+                    <button class="btn btn-ghost btn-xs" id="newConnectionButton" type="button">New</button>
+                </div>
+                <div class="connections-list" id="connectionsList" role="list"></div>
+            </nav>
+
+            <main class="workspace">
+                <div class="panels">
+                    <section class="panel" id="protoSchemaPanel" aria-labelledby="panel-proto">
+                        <div class="panel-header">
+                            <div class="panel-title" id="panel-proto">
+                                <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                                <span>Proto Schema (.proto)</span>
+                            </div>
+                            <div class="panel-actions">
+                                <span class="tag tag-success" id="schemaStatusTag" hidden>
+                                    <span id="schemaStatusText"></span>
+                                </span>
+                                <button class="btn btn-ghost" type="button" data-file-trigger="protoFile">
+                                    Import
+                                </button>
+                                <input class="file-input" id="protoFile" type="file" accept=".proto" data-file-for="protoEditor" />
+                                <button class="btn btn-ghost" id="parseSchemaButton" type="button">Parse Schema</button>
+                            </div>
+                        </div>
+                        <div class="panel-body is-editor" aria-label="Proto schema editor">
+                            <div class="cm-host" id="protoEditor"></div>
+                        </div>
+                    </section>
+
+                    <section class="panel" aria-labelledby="panel-json">
+                        <div class="panel-header">
+                            <div class="panel-title" id="panel-json">
+                                <span class="material-symbols-outlined" aria-hidden="true">data_object</span>
+                                <span>JSON Input</span>
+                            </div>
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" type="button" data-file-trigger="jsonFile">
+                                    Import
+                                </button>
+                                <input class="file-input" id="jsonFile" type="file" accept=".json,application/json" data-file-for="jsonEditor" />
+                                <button class="btn btn-primary" id="sendButton" type="button">
+                                    <span class="material-symbols-outlined" aria-hidden="true">send</span>
+                                    Send
+                                </button>
+                            </div>
+                        </div>
+                        <div class="panel-subbar" id="payloadModeBar">
+                            <span class="panel-subbar-label">Payload</span>
+                            <select class="panel-select" id="payloadModeSelect" aria-label="Payload mode">
+                                <option value="json">JSON</option>
+                                <option value="proto">Proto</option>
+                                <option value="raw">Raw</option>
+                            </select>
+                        </div>
+                        <div class="panel-subbar" id="messageTypeBar" hidden>
+                            <span class="panel-subbar-label">Oneof</span>
+                            <select class="panel-select" id="messageTypeSelect" aria-label="Oneof message type"></select>
+                        </div>
+                        <div class="panel-body is-editor" aria-label="JSON input">
+                            <div class="cm-host" id="jsonEditor"></div>
+                        </div>
+                        <div class="panel-footer">
+                            <span class="material-symbols-outlined" aria-hidden="true">analytics</span>
+                            <span id="sizeComparison" data-json-bytes="45" data-proto-bytes="22"></span>
+                        </div>
+                    </section>
+
+                    <section class="panel" aria-labelledby="panel-response">
+                        <div class="panel-header">
+                            <div class="panel-title" id="panel-response">
+                                <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                                <span>Server Response</span>
+                            </div>
+                            <div class="panel-actions">
+                                <span class="panel-meta" id="rttDisplay">RTT: —</span>
+                                <span class="panel-meta" id="responseTimeDisplay">—</span>
+                                <button class="btn btn-ghost" id="rawHexButton" type="button">Raw Hex</button>
+                            </div>
+                        </div>
+                        <div class="panel-body is-editor" aria-label="Server response">
+                            <div class="cm-host" id="responseEditor"></div>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+        <footer class="statusbar">
+            <div class="status-left">
+                <div class="status-summary" id="statusSummary">v0.0.1 protobuf-tester | WebSocket: Connected</div>
+                <div class="status-error" id="statusLastError" hidden></div>
+            </div>
+            <div class="status-actions">
+                <button class="status-btn is-active" id="errorsToggle" type="button" aria-expanded="false">
+                    <span class="material-symbols-outlined" aria-hidden="true">error</span>
+                    Errors
+                </button>
+            </div>
+        </footer>
+
+        <div class="errors-panel" id="errorsPanel" hidden>
+            <div class="errors-panel-header">
+                <span class="material-symbols-outlined" aria-hidden="true">error</span>
+                <span>Recent errors</span>
+            </div>
+            <div class="errors-panel-list" id="errorsList"></div>
+        </div>
+
+        <div class="error-toast" id="errorToast" aria-live="polite" aria-hidden="true" hidden>
+            <span class="material-symbols-outlined" aria-hidden="true">error</span>
+            <div class="error-toast-body">
+                <div class="error-toast-title">Error</div>
+                <div class="error-toast-message" id="errorToastMessage"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./src/main.js" type="module"></script>
+</body>
+
+</html>
