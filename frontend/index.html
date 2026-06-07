@@ -25,6 +25,10 @@
                     <span class="material-symbols-outlined" aria-hidden="true">link</span>
                     <input class="input" id="websocketUrlInput" type="text" value="ws://localhost:8080" />
                 </label>
+                <label class="auto-reconnect-label" id="autoReconnectLabel" title="Automatically reconnect when disconnected">
+                    <input type="checkbox" id="autoReconnectCheckbox" />
+                    Auto-reconnect
+                </label>
                 <button class="btn btn-primary" id="connectButton" type="button">Connect</button>
             </div>
             <div class="topbar-actions" aria-label="Window actions">
@@ -160,7 +164,7 @@
         </div>
     </div>
 
-    <script src="./src/main.js" type="module"></script>
+    <script src="./src/main.ts" type="module"></script>
 </body>
 
 </html>
