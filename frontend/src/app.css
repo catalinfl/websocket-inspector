@@ -989,7 +989,7 @@
 
 .auto-reconnect-label .toggle-input:checked + .toggle-switch::after {
     transform: translateX(14px);
-    background-color: var(--on-primary);
+    background-color: var(--on-surface);
 }
 
 .auto-reconnect-label .toggle-input:focus-visible + .toggle-switch {
@@ -1003,11 +1003,4 @@
 
 .auto-reconnect-label.is-reconnecting .toggle-switch {
     background-color: var(--primary);
-    animation: reconnect-pulse 1.5s ease-in-out infinite;
 }
-
-@keyframes reconnect-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
