@@ -1,8 +1,8 @@
 import { createSchemaState, getSchemaStatus, type SchemaState } from "./schema";
 import { createMessageState, type MessageState } from "./message";
-import { setEditorText } from "./editor";
-import { setConnectionStatus, updateConnectButtonState, updateMessageTypeSelect, setRawHexButtonActive, setPayloadModeUI, setSchemaValidationStatus } from "./ui";
-import type { UIElements } from "./ui";
+import { setEditorText } from "../ui/editor";
+import { setConnectionStatus, updateConnectButtonState, updateMessageTypeSelect, setRawHexButtonActive, setPayloadModeUI, setSchemaValidationStatus } from "../ui/elements";
+import type { UIElements } from "../ui/elements";
 
 /**
  * Represents a single WebSocket connection with all its state.

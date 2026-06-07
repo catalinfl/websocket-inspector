@@ -3,7 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { indentUnit, StreamLanguage } from "@codemirror/language";
 import { json } from "@codemirror/lang-json";
-import { protoLanguage } from "./proto_codemirror";
+import { protoLanguage } from "./proto-codemirror";
 
 /**
  * Map of editor IDs to their EditorView instances.

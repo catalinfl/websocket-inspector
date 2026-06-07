@@ -1,8 +1,8 @@
-import { onEditorChange, getEditorText, parseJsonEditorValue } from "./editor";
-import { createErrorManager } from "./errors";
-import { getSchemaStatus, selectOneof, parseSchemaForConnection } from "./schema";
-import { sendMessage, handleBinaryResponse, toggleHexView } from "./message";
-import { connectToWebSocket, disconnectWebSocket, sendTextMessage, setupWebSocketListeners } from "./websocket";
+import { onEditorChange, getEditorText, parseJsonEditorValue } from "./ui/editor";
+import { createErrorManager } from "./ui/errors";
+import { getSchemaStatus, selectOneof, parseSchemaForConnection } from "./core/schema";
+import { sendMessage, handleBinaryResponse, toggleHexView } from "./core/message";
+import { connectToWebSocket, disconnectWebSocket, sendTextMessage, setupWebSocketListeners } from "./services/websocket";
 import { getUtf8ByteLength } from "./utils";
 import {
     elements,
@@ -21,7 +21,7 @@ import {
     setupFileImports,
     setupAdvancedToggle,
     updateConnectButtonState,
-} from "./ui";
+} from "./ui/elements";
 import {
     createConnectionState,
     getActiveConnection,
@@ -32,7 +32,7 @@ import {
     isSyncing,
     addConnectionState,
     type ConnectionState,
-} from "./connections";
+} from "./core/connections";
 
 initializeUI();
 
@@ -64,7 +64,7 @@ const { recordError, recordConnectionError } = createErrorManager({
 
 function updateMessageTypeSelectForConnection(
     connection: ConnectionState | null,
-    options: import("./parse").OneofOption[],
+    options: import("./core/parse").OneofOption[],
     selectedValue: string
 ): string {
     if (!connection || connection.payloadMode !== "proto") {
@@ -86,9 +86,9 @@ if (elements.newConnectionButton) {
         const connection = createConnectionState({ endpoint, protoText, jsonText, oneofValue, payloadMode });
         addConnectionState(connection);
 
-        const schemaCallbacks: import("./schema").ConnectionSchemaCallbacks = {
+        const schemaCallbacks: import("./core/schema").ConnectionSchemaCallbacks = {
             recordConnectionError: (connId: string, msg: string) => recordConnectionError(connId, msg, connection, { recordError }),
-            updateMessageTypeSelect: (options: import("./parse").OneofOption[], selectedValue: string) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
+            updateMessageTypeSelect: (options: import("./core/parse").OneofOption[], selectedValue: string) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
             selectOneof,
             setJsonEditorValue,
         };
@@ -150,9 +150,9 @@ if (elements.parseSchemaButton) {
         }
 
         connection.protoText = getEditorText("protoEditor");
-        const schemaCallbacks: import("./schema").ConnectionSchemaCallbacks = {
+        const schemaCallbacks: import("./core/schema").ConnectionSchemaCallbacks = {
             recordConnectionError: (connId: string, msg: string) => recordConnectionError(connId, msg, connection, { recordError }),
-            updateMessageTypeSelect: (options: import("./parse").OneofOption[], selectedValue: string) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
+            updateMessageTypeSelect: (options: import("./core/parse").OneofOption[], selectedValue: string) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
             selectOneof,
             setJsonEditorValue,
         };

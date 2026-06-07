@@ -1,6 +1,6 @@
 import { editorViews, updateResponseEditor, getEditorText } from "./editor";
-import { updateSizeComparison } from "./utils";
-import type { OneofOption } from "./parse";
+import { updateSizeComparison } from "../utils";
+import type { OneofOption } from "../core/parse";
 
 /**
  * References to all UI DOM elements used throughout the application.

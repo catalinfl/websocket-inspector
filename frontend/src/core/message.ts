@@ -1,6 +1,6 @@
 import { verifyMessagePayload, encodeMessagePayload, decodeMessagePayload } from "./protobuf";
-import { getUtf8ByteLength, bytesToBase64, base64ToBytes, bytesToHexString } from "./utils";
-import { sendBinaryMessage } from "./websocket";
+import { getUtf8ByteLength, bytesToBase64, base64ToBytes, bytesToHexString } from "../utils";
+import { sendBinaryMessage } from "../services/websocket";
 import type { Root } from "protobufjs";
 
 /**

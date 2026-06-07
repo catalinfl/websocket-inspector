@@ -46,7 +46,7 @@ export function createErrorManager({
     refreshStatus,
 }: ErrorManagerCallbacks): ErrorManager {
     const recentErrors: ErrorEntry[] = [];
-    let errorToastTimer: ReturnType<typeof setTimeout> | null = null;
+    let errorToastTimer: number | null = null;
 
     if (errorsPanel) {
         errorsPanel.hidden = true;

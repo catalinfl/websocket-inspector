@@ -1,5 +1,5 @@
-import { ConnectWebSocket, DisconnectWebSocket, SendWebSocketBinary, SendWebSocketMessage } from "../wailsjs/go/main/App";
-import { EventsOn } from "../wailsjs/runtime/runtime";
+import { ConnectWebSocket, DisconnectWebSocket, SendWebSocketBinary, SendWebSocketMessage } from "../../wailsjs/go/main/App";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 
 /**
  * Status information for a WebSocket connection event.
