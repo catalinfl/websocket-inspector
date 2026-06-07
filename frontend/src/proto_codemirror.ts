@@ -1,6 +1,9 @@
 import { StreamLanguage } from "@codemirror/language";
 
-export const protoKeywords = new Set([
+/**
+ * Set of protobuf language keywords.
+ */
+export const protoKeywords: Set<string> = new Set([
     "syntax",
     "import",
     "package",
@@ -23,7 +26,10 @@ export const protoKeywords = new Set([
     "weak",
 ]);
 
-export const protoTypes = new Set([
+/**
+ * Set of protobuf scalar types.
+ */
+export const protoTypes: Set<string> = new Set([
     "double",
     "float",
     "int32",
@@ -41,7 +47,10 @@ export const protoTypes = new Set([
     "bytes",
 ]);
 
-export const protoLanguage = StreamLanguage.define({
+/**
+ * CodeMirror language support for protobuf (.proto) syntax highlighting.
+ */
+export const protoLanguage = StreamLanguage.define<{ level: number }>({
     startState() {
         return { level: 0 };
     },

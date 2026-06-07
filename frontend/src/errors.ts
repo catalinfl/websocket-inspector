@@ -1,3 +1,41 @@
+/**
+ * Represents a single error entry with timestamp.
+ */
+export interface ErrorEntry {
+    message: string;
+    timestamp: Date;
+}
+
+/**
+ * Callbacks for the error manager.
+ */
+export interface ErrorManagerCallbacks {
+    errorsToggle: HTMLElement | null;
+    errorsPanel: HTMLElement | null;
+    errorsList: HTMLElement | null;
+    errorToast: HTMLElement | null;
+    errorToastMessage: HTMLElement | null;
+    setActiveErrorMessage: (message: string) => void;
+    refreshStatus: () => void;
+}
+
+/**
+ * The public API returned by createErrorManager.
+ */
+export interface ErrorManager {
+    recordError: (message: string) => void;
+    renderRecentErrors: () => void;
+    hideErrorToast: () => void;
+    showErrorToast: (message: string) => void;
+    recentErrors: ErrorEntry[];
+    recordConnectionError: (connectionId: string, message: string, connection: { lastError?: string } | null, callbacks: { recordError: (msg: string) => void; setErrorStatus?: (msg: string, show: boolean) => void }) => void;
+}
+
+/**
+ * Creates an error manager that handles error display, toasts, and logging.
+ * @param options - Configuration and callbacks for the error manager
+ * @returns An ErrorManager instance
+ */
 export function createErrorManager({
     errorsToggle,
     errorsPanel,
@@ -6,9 +44,9 @@ export function createErrorManager({
     errorToastMessage,
     setActiveErrorMessage,
     refreshStatus,
-}) {
-    const recentErrors = [];
-    let errorToastTimer = null;
+}: ErrorManagerCallbacks): ErrorManager {
+    const recentErrors: ErrorEntry[] = [];
+    let errorToastTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (errorsPanel) {
         errorsPanel.hidden = true;
@@ -22,7 +60,7 @@ export function createErrorManager({
         errorsList.textContent = "";
     }
 
-    function renderRecentErrors() {
+    function renderRecentErrors(): void {
         if (!errorsList) {
             return;
         }
@@ -55,7 +93,7 @@ export function createErrorManager({
         }
     }
 
-    function hideErrorToast() {
+    function hideErrorToast(): void {
         if (!errorToast) {
             return;
         }
@@ -64,7 +102,7 @@ export function createErrorManager({
         errorToast.setAttribute("aria-hidden", "true");
     }
 
-    function showErrorToast(message) {
+    function showErrorToast(message: string): void {
         if (!errorToast || !errorToastMessage) {
             return;
         }
@@ -82,8 +120,8 @@ export function createErrorManager({
         }, 5000);
     }
 
-    function recordError(message) {
-        const entry = {
+    function recordError(message: string): void {
+        const entry: ErrorEntry = {
             message: String(message),
             timestamp: new Date(),
         };
@@ -113,7 +151,7 @@ export function createErrorManager({
     }
 
     if (errorsToggle && errorsPanel) {
-        const hideErrorsPanel = () => {
+        const hideErrorsPanel = (): void => {
             errorsToggle.setAttribute("aria-expanded", "false");
             errorsToggle.classList.remove("is-open");
             errorsPanel.hidden = true;
@@ -134,7 +172,12 @@ export function createErrorManager({
         });
     }
 
-    function recordConnectionError(connectionId, message, connection, callbacks) {
+    function recordConnectionError(
+        connectionId: string,
+        message: string,
+        connection: { lastError?: string } | null,
+        callbacks: { recordError: (msg: string) => void; setErrorStatus?: (msg: string, show: boolean) => void }
+    ): void {
         if (connection) {
             connection.lastError = String(message);
         }
@@ -154,6 +197,6 @@ export function createErrorManager({
         hideErrorToast,
         showErrorToast,
         recentErrors,
-        recordConnectionError
+        recordConnectionError,
     };
 }

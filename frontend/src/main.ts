@@ -31,6 +31,7 @@ import {
     syncUIFromConnection,
     isSyncing,
     addConnectionState,
+    type ConnectionState,
 } from "./connections";
 
 initializeUI();
@@ -43,7 +44,7 @@ const { recordError, recordConnectionError } = createErrorManager({
     errorsList: elements.errorsList,
     errorToast: elements.errorToast,
     errorToastMessage: elements.errorToastMessage,
-    setActiveErrorMessage: (message) => {
+    setActiveErrorMessage: (message: string) => {
         activeErrorMessage = String(message);
     },
     refreshStatus: () => {
@@ -61,7 +62,11 @@ const { recordError, recordConnectionError } = createErrorManager({
     },
 });
 
-function updateMessageTypeSelectForConnection(connection, options, selectedValue) {
+function updateMessageTypeSelectForConnection(
+    connection: ConnectionState | null,
+    options: import("./parse").OneofOption[],
+    selectedValue: string
+): string {
     if (!connection || connection.payloadMode !== "proto") {
         return updateMessageTypeSelect([], "");
     }
@@ -81,9 +86,9 @@ if (elements.newConnectionButton) {
         const connection = createConnectionState({ endpoint, protoText, jsonText, oneofValue, payloadMode });
         addConnectionState(connection);
 
-        const schemaCallbacks = {
-            recordConnectionError: (connId, msg) => recordConnectionError(connId, msg, connection, { recordError }),
-            updateMessageTypeSelect: (options, selectedValue) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
+        const schemaCallbacks: import("./schema").ConnectionSchemaCallbacks = {
+            recordConnectionError: (connId: string, msg: string) => recordConnectionError(connId, msg, connection, { recordError }),
+            updateMessageTypeSelect: (options: import("./parse").OneofOption[], selectedValue: string) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
             selectOneof,
             setJsonEditorValue,
         };
@@ -104,13 +109,13 @@ if (elements.payloadModeSelect) {
             return;
         }
 
-        connection.payloadMode = elements.payloadModeSelect.value || "json";
+        connection.payloadMode = elements.payloadModeSelect!.value || "json";
         setPayloadModeUI(connection.payloadMode);
         syncUIFromConnection(connection, elements);
     });
 }
 
-onEditorChange("protoEditor", (text) => {
+onEditorChange("protoEditor", (text: string) => {
     if (isSyncing()) {
         return;
     }
@@ -123,7 +128,7 @@ onEditorChange("protoEditor", (text) => {
     connection.protoText = text;
 });
 
-onEditorChange("jsonEditor", (text) => {
+onEditorChange("jsonEditor", (text: string) => {
     if (isSyncing()) {
         return;
     }
@@ -145,9 +150,9 @@ if (elements.parseSchemaButton) {
         }
 
         connection.protoText = getEditorText("protoEditor");
-        const schemaCallbacks = {
-            recordConnectionError: (connId, msg) => recordConnectionError(connId, msg, connection, { recordError }),
-            updateMessageTypeSelect: (options, selectedValue) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
+        const schemaCallbacks: import("./schema").ConnectionSchemaCallbacks = {
+            recordConnectionError: (connId: string, msg: string) => recordConnectionError(connId, msg, connection, { recordError }),
+            updateMessageTypeSelect: (options: import("./parse").OneofOption[], selectedValue: string) => updateMessageTypeSelectForConnection(connection, options, selectedValue),
             selectOneof,
             setJsonEditorValue,
         };
@@ -167,7 +172,7 @@ if (elements.messageTypeSelect) {
             return;
         }
 
-        const value = elements.messageTypeSelect.value;
+        const value = elements.messageTypeSelect!.value;
         const template = selectOneof(value, connection.schemaState);
         connection.activeOneofValue = value;
         if (template) {
@@ -187,6 +192,13 @@ setupWebSocketListeners({
         connection.connectionLabel = status.connectionLabel;
         connection.endpoint = status.endpoint || connection.endpoint;
         connection.lastError = "";
+
+        connection.reconnectAttempt = 0;
+        connection.manualDisconnect = false;
+        if (connection.reconnectTimer) {
+            clearTimeout(connection.reconnectTimer);
+            connection.reconnectTimer = null;
+        }
 
         if (connection.id === getActiveConnection()?.id) {
             activeErrorMessage = "";
@@ -212,24 +224,31 @@ setupWebSocketListeners({
         }
 
         renderConnections(elements);
+
+        if (connection.manualDisconnect) {
+            connection.manualDisconnect = false;
+        } else if (connection.autoReconnect && connection.endpoint) {
+            scheduleReconnect(connection);
+        }
     },
-    onMessage: (message) => {
-        if (!message || typeof message !== "object" || !message.type) {
+    onMessage: (message: unknown) => {
+        if (!message || typeof message !== "object" || !(message as Record<string, unknown>).type) {
             return;
         }
 
-        const connection = getConnection(message.id);
+        const msg = message as Record<string, unknown>;
+        const connection = getConnection(String(msg.id));
         if (!connection) {
             return;
         }
 
-        if (message.type === "text") {
-            const text = String(message.data || "");
+        if (msg.type === "text") {
+            const text = String(msg.data || "");
             if (connection.payloadMode === "json") {
                 try {
                     const parsed = JSON.parse(text);
                     connection.responseText = JSON.stringify(parsed, null, 2);
-                } catch (error) {
+                } catch (_error: unknown) {
                     connection.responseText = text;
                 }
             } else {
@@ -241,11 +260,11 @@ setupWebSocketListeners({
             return;
         }
 
-        if (message.type === "binary") {
+        if (msg.type === "binary") {
             const { protoRoot, activeMessageName } = getSchemaStatus(connection.schemaState);
-            handleBinaryResponse(message.data, protoRoot, activeMessageName, connection.messageState, {
-                recordError: (msg) => recordConnectionError(connection.id, msg, connection, { recordError }),
-                onRTTUpdate: (rtt, timestamp) => {
+            handleBinaryResponse(String(msg.data), protoRoot, activeMessageName, connection.messageState, {
+                recordError: (errorMsg: string) => recordConnectionError(connection.id, errorMsg, connection, { recordError }),
+                onRTTUpdate: (rtt: number, timestamp: string) => {
                     connection.stats.rtt = rtt;
                     connection.stats.timestamp = timestamp;
                     if (connection.id === getActiveConnection()?.id) {
@@ -253,7 +272,7 @@ setupWebSocketListeners({
                         updateTimestampDisplay(timestamp);
                     }
                 },
-                onResponseDecoded: (jsonText, jsonBytes, protoBytes) => {
+                onResponseDecoded: (jsonText: string, jsonBytes: number, protoBytes: number) => {
                     connection.responseText = jsonText;
                     connection.stats.jsonBytes = jsonBytes;
                     connection.stats.protoBytes = protoBytes;
@@ -262,7 +281,7 @@ setupWebSocketListeners({
                         updateSizeDisplay(jsonBytes, protoBytes);
                     }
                 },
-                onResponseRaw: (text) => {
+                onResponseRaw: (text: string) => {
                     connection.responseText = text;
                     if (connection.id === getActiveConnection()?.id) {
                         updateResponseView(text);
@@ -282,8 +301,10 @@ if (elements.connectButton && elements.websocketInput) {
         }
 
         if (connection.connected) {
+            connection.manualDisconnect = true;
+            clearReconnect(connection);
             await disconnectWebSocket(connection.id, {
-                recordError: (message) => recordConnectionError(connection.id, message, connection, { recordError }),
+                recordError: (message: string) => recordConnectionError(connection.id, message, connection, { recordError }),
                 onDisconnected: () => {
                     connection.connected = false;
                     connection.connectionLabel = "Disconnected";
@@ -296,7 +317,10 @@ if (elements.connectButton && elements.websocketInput) {
             return;
         }
 
-        const endpoint = elements.websocketInput.value.trim();
+        let endpoint: string | null = null;
+        if (elements.websocketInput) {
+            endpoint = elements.websocketInput.value.trim();
+        }
 
         if (!endpoint) {
             recordConnectionError(connection.id, "Enter a websocket URL", connection, { recordError });
@@ -307,8 +331,8 @@ if (elements.connectButton && elements.websocketInput) {
         connection.endpoint = endpoint;
 
         await connectToWebSocket(connection.id, endpoint, {
-            recordError: (message) => recordConnectionError(connection.id, message, connection, { recordError }),
-            setConnectionStatus: (connectionId, text, connected) => {
+            recordError: (message: string) => recordConnectionError(connection.id, message, connection, { recordError }),
+            setConnectionStatus: (connectionId: string, text: string, connected: boolean) => {
                 const target = getConnection(connectionId);
                 if (!target) {
                     return;
@@ -330,19 +354,110 @@ if (elements.connectButton && elements.websocketInput) {
         });
     });
 
-    elements.websocketInput.addEventListener("input", () => {
+    elements.websocketInput!.addEventListener("input", () => {
         const connection = getActiveConnection();
         if (!connection) {
             return;
         }
 
-        connection.endpoint = elements.websocketInput.value;
+        connection.endpoint = elements.websocketInput!.value;
         renderConnections(elements);
     });
 
-    elements.websocketInput.addEventListener("keydown", (event) => {
+    elements.websocketInput!.addEventListener("keydown", (event: KeyboardEvent) => {
         if (event.key === "Enter") {
-            elements.connectButton.click();
+            elements.connectButton!.click();
+        }
+    });
+}
+
+const MAX_RECONNECT_ATTEMPTS = 50;
+const RECONNECT_DELAY_MS = 3000;
+
+function scheduleReconnect(connection: ConnectionState): void {
+    if (!connection.autoReconnect || connection.connected) {
+        clearReconnect(connection);
+        return;
+    }
+
+    if (connection.reconnectTimer) {
+        return;
+    }
+
+    connection.reconnectAttempt++;
+    if (connection.reconnectAttempt > MAX_RECONNECT_ATTEMPTS) {
+        clearReconnect(connection);
+        recordConnectionError(connection.id, `Auto-reconnect stopped after ${MAX_RECONNECT_ATTEMPTS} attempts`, connection, { recordError });
+        return;
+    }
+
+    const isActive = connection.id === getActiveConnection()?.id;
+    if (isActive && elements.autoReconnectLabel) {
+        elements.autoReconnectLabel.classList.add("is-reconnecting");
+    }
+
+    connection.reconnectTimer = setTimeout(async () => {
+        connection.reconnectTimer = null;
+        const current = getConnection(connection.id);
+        if (!current || !current.autoReconnect || current.connected || !current.endpoint) {
+            if (current) {
+                clearReconnect(current);
+            }
+            return;
+        }
+        await connectToWebSocket(current.id, current.endpoint, {
+            recordError: (message: string) => recordConnectionError(current.id, message, current, { recordError }),
+            setConnectionStatus: (connectionId: string, text: string, connected: boolean) => {
+                const target = getConnection(connectionId);
+                if (!target) {
+                    return;
+                }
+
+                target.connected = connected;
+                target.connectionLabel = connected ? text : "Disconnected";
+
+                if (connectionId === getActiveConnection()?.id) {
+                    setConnectionStatus(text, connected);
+                    updateConnectButtonState(connected);
+                }
+
+                renderConnections(elements);
+            },
+        });
+        const latest = getConnection(connection.id);
+        if (latest && !latest.connected && latest.autoReconnect) {
+            scheduleReconnect(latest);
+        }
+    }, RECONNECT_DELAY_MS);
+}
+
+function clearReconnect(connection: ConnectionState | null): void {
+    if (!connection) {
+        return;
+    }
+    if (connection.reconnectTimer) {
+        clearTimeout(connection.reconnectTimer);
+        connection.reconnectTimer = null;
+    }
+    connection.reconnectAttempt = 0;
+    const activeConnection = getActiveConnection();
+    if (activeConnection && connection.id === activeConnection.id && elements.autoReconnectLabel) {
+        elements.autoReconnectLabel.classList.remove("is-reconnecting");
+    }
+}
+
+// Auto-reconnect checkbox
+if (elements.autoReconnectCheckbox) {
+    elements.autoReconnectCheckbox.addEventListener("change", () => {
+        const connection = getActiveConnection();
+        if (!connection) {
+            return;
+        }
+        connection.autoReconnect = elements.autoReconnectCheckbox!.checked;
+        if (connection.autoReconnect && !connection.connected && connection.endpoint) {
+            scheduleReconnect(connection);
+        } else if (!connection.autoReconnect) {
+            clearReconnect(connection);
         }
     });
 }
@@ -376,8 +491,8 @@ if (elements.sendButton) {
                 }
 
                 await sendMessage(connection.id, jsonPayload, jsonText, protoRoot, activeMessageName, connection.messageState, {
-                    recordError: (message) => recordConnectionError(connection.id, message, connection, { recordError }),
-                    onSizeUpdate: (jsonBytes, protoBytes) => {
+                    recordError: (message: string) => recordConnectionError(connection.id, message, connection, { recordError }),
+                    onSizeUpdate: (jsonBytes: number, protoBytes: number) => {
                         connection.stats.jsonBytes = jsonBytes;
                         connection.stats.protoBytes = protoBytes;
                         if (connection.id === getActiveConnection()?.id) {
@@ -385,7 +500,7 @@ if (elements.sendButton) {
                         }
                     },
                 });
-            } catch (error) {
+            } catch (error: unknown) {
                 recordConnectionError(connection.id, error instanceof Error ? error.message : "Invalid JSON input", connection, { recordError });
             }
             return;
@@ -400,7 +515,7 @@ if (elements.sendButton) {
         if (payloadMode === "json") {
             try {
                 JSON.parse(rawText);
-            } catch (error) {
+            } catch (error: unknown) {
                 recordConnectionError(connection.id, error instanceof Error ? error.message : "Invalid JSON input", connection, { recordError });
                 return;
             }
@@ -413,7 +528,7 @@ if (elements.sendButton) {
         }
 
         await sendTextMessage(connection.id, rawText, {
-            recordError: (message) => recordConnectionError(connection.id, message, connection, { recordError }),
+            recordError: (message: string) => recordConnectionError(connection.id, message, connection, { recordError }),
         });
     });
 }
@@ -427,8 +542,8 @@ if (elements.rawHexButton) {
 
         const { protoRoot, activeMessageName } = getSchemaStatus(connection.schemaState);
         const isActive = toggleHexView(protoRoot, activeMessageName, connection.messageState, {
-            recordError: (message) => recordConnectionError(connection.id, message, connection, { recordError }),
-            onViewChanged: (viewType, content) => {
+            recordError: (message: string) => recordConnectionError(connection.id, message, connection, { recordError }),
+            onViewChanged: (viewType: string, content: string) => {
                 connection.responseText = content;
                 if (connection.id === getActiveConnection()?.id) {
                     updateResponseView(content);

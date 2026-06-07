@@ -1,4 +1,51 @@
-const scalarDefaults = new Map([
+/**
+ * Represents a parsed protobuf field.
+ */
+export interface ProtoField {
+    name: string;
+    type: string;
+    repeated: boolean;
+    map: boolean;
+}
+
+/**
+ * Represents a parsed protobuf oneof block.
+ */
+export interface ProtoOneof {
+    name: string;
+    fields: ProtoField[];
+}
+
+/**
+ * Represents a parsed protobuf message.
+ */
+export interface ProtoMessage {
+    fields: ProtoField[];
+    oneofs: ProtoOneof[];
+}
+
+/**
+ * Represents a oneof option for the UI select element.
+ */
+export interface OneofOption {
+    value: string;
+    label: string;
+    messageName: string;
+    oneofName: string;
+    fieldName: string;
+    fieldType: string;
+}
+
+/**
+ * Represents a fully parsed protobuf schema.
+ */
+export interface ParsedSchema {
+    messages: Map<string, ProtoMessage>;
+    oneofOptions: OneofOption[];
+}
+
+/** Map of protobuf scalar types to their default values. */
+const scalarDefaults: Map<string, unknown> = new Map<string, unknown>([
     ["double", 0],
     ["float", 0],
     ["int32", 0],
@@ -16,11 +63,16 @@ const scalarDefaults = new Map([
     ["bytes", ""],
 ]);
 
-export function parseProtoSchema(source) {
+/**
+ * Parses a protobuf schema source string into a structured representation.
+ * @param source - Raw .proto file content
+ * @returns Parsed schema with messages and oneof options
+ */
+export function parseProtoSchema(source: string): ParsedSchema {
     const cleaned = stripProtoComments(source);
     const messageBlocks = extractBlocks(cleaned, "message");
-    const messages = new Map();
-    const oneofOptions = [];
+    const messages: Map<string, ProtoMessage> = new Map();
+    const oneofOptions: OneofOption[] = [];
 
     for (const block of messageBlocks) {
         const oneofBlocks = extractBlocks(block.body, "oneof");
@@ -29,7 +81,7 @@ export function parseProtoSchema(source) {
             oneofBlocks.map((oneof) => ({ start: oneof.start, end: oneof.end }))
         );
         const fields = parseFields(cleanedBody);
-        const oneofs = oneofBlocks.map((oneof) => ({
+        const oneofs: ProtoOneof[] = oneofBlocks.map((oneof) => ({
             name: oneof.name,
             fields: parseFields(oneof.body),
         }));
@@ -55,7 +107,14 @@ export function parseProtoSchema(source) {
     return { messages, oneofOptions };
 }
 
-export function buildMessageTemplate(messageName, schema, depth = 0) {
+/**
+ * Builds a JSON template object for a given message type.
+ * @param messageName - Name of the protobuf message
+ * @param schema - Parsed schema
+ * @param depth - Current recursion depth (prevents infinite loops)
+ * @returns A template object with default values
+ */
+export function buildMessageTemplate(messageName: string, schema: ParsedSchema, depth: number = 0): Record<string, unknown> {
     if (!schema || depth > 3) {
         return {};
     }
@@ -65,7 +124,7 @@ export function buildMessageTemplate(messageName, schema, depth = 0) {
         return {};
     }
 
-    const template = {};
+    const template: Record<string, unknown> = {};
     for (const field of message.fields) {
         template[field.name] = buildFieldValue(field, schema, depth + 1);
     }
@@ -73,7 +132,13 @@ export function buildMessageTemplate(messageName, schema, depth = 0) {
     return template;
 }
 
-export function buildOneofTemplate(schema, option) {
+/**
+ * Builds a JSON template for a specific oneof option.
+ * @param schema - Parsed schema
+ * @param option - The selected oneof option
+ * @returns A template object with the oneof field populated
+ */
+export function buildOneofTemplate(schema: ParsedSchema, option: OneofOption): Record<string, unknown> {
     if (!schema || !option) {
         return {};
     }
@@ -84,15 +149,29 @@ export function buildOneofTemplate(schema, option) {
     return base;
 }
 
-function stripProtoComments(source) {
+/**
+ * Strips block and line comments from protobuf source.
+ */
+function stripProtoComments(source: string): string {
     const withoutBlock = source.replace(/\/\*[\s\S]*?\*\//g, "");
     return withoutBlock.replace(/\/\/.*$/gm, "");
 }
 
-function extractBlocks(source, keyword) {
-    const blocks = [];
+/** Represents a block extracted from protobuf source. */
+interface ExtractedBlock {
+    name: string;
+    start: number;
+    end: number;
+    body: string;
+}
+
+/**
+ * Extracts all top-level blocks matching a keyword (e.g. "message", "oneof").
+ */
+function extractBlocks(source: string, keyword: string): ExtractedBlock[] {
+    const blocks: ExtractedBlock[] = [];
     const regex = new RegExp(`\\b${keyword}\\s+([A-Za-z_][\\w]*)\\s*\\{`, "g");
-    let match;
+    let match: RegExpExecArray | null;
 
     while ((match = regex.exec(source)) !== null) {
         const name = match[1];
@@ -130,7 +209,16 @@ function extractBlocks(source, keyword) {
     return blocks;
 }
 
-function removeRanges(source, ranges) {
+/** Represents a range to remove from source. */
+interface SourceRange {
+    start: number;
+    end: number;
+}
+
+/**
+ * Replaces ranges in source with spaces (preserving character positions).
+ */
+function removeRanges(source: string, ranges: SourceRange[]): string {
     if (ranges.length === 0) {
         return source;
     }
@@ -149,8 +237,11 @@ function removeRanges(source, ranges) {
     return result;
 }
 
-function parseFields(source) {
-    const fields = [];
+/**
+ * Parses field declarations from a protobuf body string.
+ */
+function parseFields(source: string): ProtoField[] {
+    const fields: ProtoField[] = [];
     const lines = source.split(/\r?\n/);
 
     for (const line of lines) {
@@ -171,7 +262,10 @@ function parseFields(source) {
     return fields;
 }
 
-function buildFieldValue(field, schema, depth) {
+/**
+ * Builds a default value for a protobuf field.
+ */
+function buildFieldValue(field: ProtoField, schema: ParsedSchema, depth: number): unknown {
     if (field.map) {
         return {};
     }

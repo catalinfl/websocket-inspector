@@ -1,29 +1,77 @@
-import { createSchemaState, getSchemaStatus } from "./schema";
-import { createMessageState } from "./message";
-import { getEditorText, setEditorText } from "./editor";
+import { createSchemaState, getSchemaStatus, type SchemaState } from "./schema";
+import { createMessageState, type MessageState } from "./message";
+import { setEditorText } from "./editor";
 import { setConnectionStatus, updateConnectButtonState, updateMessageTypeSelect, setRawHexButtonActive, setPayloadModeUI, setSchemaValidationStatus } from "./ui";
+import type { UIElements } from "./ui";
+
+/**
+ * Represents a single WebSocket connection with all its state.
+ */
+export interface ConnectionState {
+    id: string;
+    name: string;
+    endpoint: string;
+    connected: boolean;
+    connectionLabel: string;
+    payloadMode: string;
+    autoReconnect: boolean;
+    protoText: string;
+    jsonText: string;
+    responseText: string;
+    schemaState: SchemaState;
+    messageState: MessageState;
+    stats: {
+        rtt: number | null;
+        timestamp: string;
+        jsonBytes: number;
+        protoBytes: number;
+    };
+    activeOneofValue: string;
+    lastError: string;
+    reconnectTimer: ReturnType<typeof setTimeout> | null;
+    reconnectAttempt: number;
+    manualDisconnect: boolean;
+}
+
+/**
+ * Options for creating a new connection state.
+ */
+export interface CreateConnectionOptions {
+    name?: string;
+    endpoint?: string;
+    protoText?: string;
+    jsonText?: string;
+    oneofValue?: string;
+    payloadMode?: string;
+}
 
 // Connection state management
-let connections = new Map();
-let activeConnectionId = "";
-let connectionCounter = 1;
-let isSyncingEditors = false;
-let editingConnectionId = "";
+let connections: Map<string, ConnectionState> = new Map();
+let activeConnectionId: string = "";
+let connectionCounter: number = 1;
+let isSyncingEditors: boolean = false;
+let editingConnectionId: string = "";
 
-export function createConnectionState({ name, endpoint, protoText, jsonText, oneofValue, payloadMode } = {}) {
+/**
+ * Creates a new connection state object.
+ * @param options - Optional initial values for the connection
+ * @returns A new ConnectionState
+ */
+export function createConnectionState(options: CreateConnectionOptions = {}): ConnectionState {
     const id = `connection-${connectionCounter}`;
-    const connectionName = name || `Connection ${connectionCounter}`;
+    const connectionName = options.name || `Connection ${connectionCounter}`;
     connectionCounter += 1;
 
     return {
         id,
         name: connectionName,
-        endpoint: endpoint || "",
+        endpoint: options.endpoint || "",
         connected: false,
         connectionLabel: "Disconnected",
-        payloadMode: payloadMode || "json",
-        protoText: protoText || "",
-        jsonText: jsonText || "",
+        payloadMode: options.payloadMode || "json",
+        autoReconnect: false,
+        protoText: options.protoText || "",
+        jsonText: options.jsonText || "",
         responseText: "",
         schemaState: createSchemaState(),
         messageState: createMessageState(),
@@ -33,32 +81,60 @@ export function createConnectionState({ name, endpoint, protoText, jsonText, one
             jsonBytes: 0,
             protoBytes: 0,
         },
-        activeOneofValue: oneofValue || "",
+        activeOneofValue: options.oneofValue || "",
         lastError: "",
+        reconnectTimer: null,
+        reconnectAttempt: 0,
+        manualDisconnect: false,
     };
 }
 
-export function getActiveConnection() {
+/**
+ * Returns the currently active connection, or null if none.
+ * @returns The active ConnectionState or null
+ */
+export function getActiveConnection(): ConnectionState | null {
     return connections.get(activeConnectionId) || null;
 }
 
-export function getConnection(connectionId) {
+/**
+ * Returns a connection by its ID.
+ * @param connectionId - The connection ID to look up
+ * @returns The ConnectionState or null
+ */
+export function getConnection(connectionId: string): ConnectionState | null {
     return connections.get(connectionId) || null;
 }
 
-export function getActiveConnectionId() {
+/**
+ * Returns the active connection ID.
+ * @returns The active connection ID string
+ */
+export function getActiveConnectionId(): string {
     return activeConnectionId;
 }
 
-export function getAllConnections() {
+/**
+ * Returns all connections as an array.
+ * @returns Array of all ConnectionState objects
+ */
+export function getAllConnections(): ConnectionState[] {
     return Array.from(connections.values());
 }
 
-export function addConnectionState(connection) {
+/**
+ * Adds a connection state to the store.
+ * @param connection - The connection state to add
+ */
+export function addConnectionState(connection: ConnectionState): void {
     connections.set(connection.id, connection);
 }
 
-export function renderConnections(elements) {
+/**
+ * Renders the connections list in the sidebar.
+ * @param elements - UI element references
+ */
+export function renderConnections(elements: UIElements): void {
     if (!elements.connectionsList) {
         return;
     }
@@ -82,7 +158,7 @@ export function renderConnections(elements) {
 
         const status = document.createElement("span");
         status.className = "connection-status" + (connection.connected ? " is-connected" : " is-disconnected");
-        let nameElement = null;
+        let nameElement: HTMLElement | null = null;
         if (isEditing) {
             const nameInput = document.createElement("input");
             nameInput.type = "text";
@@ -131,21 +207,21 @@ export function renderConnections(elements) {
         item.appendChild(actions);
 
         mainButton.addEventListener("click", () => setActiveConnectionDirect(connection.id, elements));
-        editButton.addEventListener("click", (event) => {
+        editButton.addEventListener("click", (event: MouseEvent) => {
             event.stopPropagation();
             startEditingConnectionName(connection.id, elements);
         });
-        deleteButton.addEventListener("click", (event) => {
+        deleteButton.addEventListener("click", (event: MouseEvent) => {
             event.stopPropagation();
             deleteConnection(connection.id, elements);
         });
 
         if (isEditing && nameElement) {
-            const nameInput = nameElement;
+            const nameInput = nameElement as HTMLInputElement;
             mainButton.disabled = true;
             nameInput.focus();
             nameInput.select();
-            nameInput.addEventListener("keydown", (event) => {
+            nameInput.addEventListener("keydown", (event: KeyboardEvent) => {
                 if (event.key === "Enter") {
                     event.preventDefault();
                     commitConnectionName(connection.id, nameInput.value, elements);
@@ -159,7 +235,7 @@ export function renderConnections(elements) {
             });
         } else {
             item.addEventListener("mouseenter", () => {
-                const name = item.querySelector(".connection-name");
+                const name = item.querySelector(".connection-name") as HTMLElement | null;
                 if (!name) {
                     return;
                 }
@@ -169,7 +245,7 @@ export function renderConnections(elements) {
                 }
             });
             item.addEventListener("mouseleave", () => {
-                const name = item.querySelector(".connection-name");
+                const name = item.querySelector(".connection-name") as HTMLElement | null;
                 if (!name) {
                     return;
                 }
@@ -181,7 +257,10 @@ export function renderConnections(elements) {
     }
 }
 
-function startEditingConnectionName(connectionId, elements) {
+/**
+ * Starts editing a connection's name in the UI.
+ */
+function startEditingConnectionName(connectionId: string, elements: UIElements): void {
     if (!connections.has(connectionId)) {
         return;
     }
@@ -190,7 +269,7 @@ function startEditingConnectionName(connectionId, elements) {
     renderConnections(elements);
     requestAnimationFrame(() => {
         const selector = `.connection-name-input[data-connection-id="${connectionId}"]`;
-        const input = elements.connectionsList?.querySelector(selector);
+        const input = elements.connectionsList?.querySelector(selector) as HTMLInputElement | null;
         if (input) {
             input.focus();
             input.select();
@@ -198,12 +277,18 @@ function startEditingConnectionName(connectionId, elements) {
     });
 }
 
-function cancelEditingConnectionName(elements) {
+/**
+ * Cancels editing a connection name.
+ */
+function cancelEditingConnectionName(elements: UIElements): void {
     editingConnectionId = "";
     renderConnections(elements);
 }
 
-function commitConnectionName(connectionId, nextName, elements) {
+/**
+ * Commits a connection name change.
+ */
+function commitConnectionName(connectionId: string, nextName: string, elements: UIElements): void {
     const connection = connections.get(connectionId);
     if (!connection) {
         return;
@@ -218,7 +303,10 @@ function commitConnectionName(connectionId, nextName, elements) {
     renderConnections(elements);
 }
 
-function deleteConnection(connectionId, elements) {
+/**
+ * Deletes a connection after user confirmation.
+ */
+function deleteConnection(connectionId: string, elements: UIElements): void {
     const connection = connections.get(connectionId);
     if (!connection) {
         return;
@@ -227,6 +315,10 @@ function deleteConnection(connectionId, elements) {
     const confirmed = window.confirm(`Delete ${connection.name}?`);
     if (!confirmed) {
         return;
+    }
+
+    if (connection.reconnectTimer) {
+        clearTimeout(connection.reconnectTimer);
     }
 
     connections.delete(connectionId);
@@ -251,21 +343,34 @@ function deleteConnection(connectionId, elements) {
     renderConnections(elements);
 }
 
-function setActiveConnectionDirect(connectionId, elements) {
+/**
+ * Sets the active connection directly (internal).
+ */
+function setActiveConnectionDirect(connectionId: string, elements: UIElements): void {
     if (!connections.has(connectionId)) {
         return;
     }
 
     activeConnectionId = connectionId;
-    syncUIFromConnection(getActiveConnection(), elements);
+    syncUIFromConnection(getActiveConnection()!, elements);
     renderConnections(elements);
 }
 
-export function setActiveConnection(connectionId, elements) {
+/**
+ * Sets the active connection by ID.
+ * @param connectionId - The connection ID to activate
+ * @param elements - UI element references
+ */
+export function setActiveConnection(connectionId: string, elements: UIElements): void {
     setActiveConnectionDirect(connectionId, elements);
 }
 
-export function syncUIFromConnection(connection, elements) {
+/**
+ * Synchronizes the UI to reflect a connection's state.
+ * @param connection - The connection to sync from
+ * @param elements - UI element references
+ */
+export function syncUIFromConnection(connection: ConnectionState | null, elements: UIElements): void {
     if (!connection) {
         return;
     }
@@ -283,6 +388,16 @@ export function syncUIFromConnection(connection, elements) {
     setConnectionStatus(connection.connectionLabel, connection.connected);
     updateConnectButtonState(connection.connected);
 
+    if (elements.autoReconnectCheckbox) {
+        elements.autoReconnectCheckbox.checked = connection.autoReconnect || false;
+        if (elements.autoReconnectLabel) {
+            elements.autoReconnectLabel.classList.toggle(
+                "is-reconnecting",
+                connection.autoReconnect && !connection.connected && connection.reconnectTimer !== null
+            );
+        }
+    }
+
     const payloadMode = connection.payloadMode || "json";
     setPayloadModeUI(payloadMode);
     setSchemaValidationStatus(connection.schemaState.validationStatus || "empty");
@@ -298,10 +413,18 @@ export function syncUIFromConnection(connection, elements) {
     }
 }
 
-export function isSyncing() {
+/**
+ * Returns whether the editors are currently being synced programmatically.
+ * @returns True if syncing, false otherwise
+ */
+export function isSyncing(): boolean {
     return isSyncingEditors;
 }
 
-export function setSyncing(value) {
+/**
+ * Sets the syncing flag to prevent recursive editor change handlers.
+ * @param value - The new syncing state
+ */
+export function setSyncing(value: boolean): void {
     isSyncingEditors = value;
 }

@@ -1,8 +1,48 @@
 import { verifyMessagePayload, encodeMessagePayload, decodeMessagePayload } from "./protobuf";
 import { getUtf8ByteLength, bytesToBase64, base64ToBytes, bytesToHexString } from "./utils";
 import { sendBinaryMessage } from "./websocket";
+import type { Root } from "protobufjs";
 
-export function createMessageState() {
+/**
+ * Represents the state of message sending/receiving for a connection.
+ */
+export interface MessageState {
+    lastSendTimestamp: number;
+    lastResponseBytes: Uint8Array | null;
+    isHexViewActive: boolean;
+}
+
+/**
+ * Callbacks for message sending operations.
+ */
+export interface SendMessageCallbacks {
+    recordError: (message: string) => void;
+    onSizeUpdate?: (jsonBytes: number, protoBytes: number) => void;
+}
+
+/**
+ * Callbacks for binary response handling.
+ */
+export interface BinaryResponseCallbacks {
+    recordError: (message: string) => void;
+    onRTTUpdate: (rtt: number, timestamp: string) => void;
+    onResponseDecoded: (jsonText: string, jsonBytes: number, protoBytes: number) => void;
+    onResponseRaw: (text: string) => void;
+}
+
+/**
+ * Callbacks for hex view toggling.
+ */
+export interface HexViewCallbacks {
+    recordError: (message: string) => void;
+    onViewChanged: (viewType: string, content: string) => void;
+}
+
+/**
+ * Creates a new message state.
+ * @returns A fresh MessageState
+ */
+export function createMessageState(): MessageState {
     return {
         lastSendTimestamp: 0,
         lastResponseBytes: null,
@@ -10,7 +50,25 @@ export function createMessageState() {
     };
 }
 
-export async function sendMessage(connectionId, jsonPayload, jsonText, protoRoot, activeMessageName, messageState, callbacks) {
+/**
+ * Sends a protobuf-encoded message over a WebSocket connection.
+ * @param connectionId - The connection ID
+ * @param jsonPayload - The parsed JSON payload
+ * @param jsonText - The raw JSON text
+ * @param protoRoot - The protobuf root
+ * @param activeMessageName - The active message type name
+ * @param messageState - The message state to update
+ * @param callbacks - Callbacks for error reporting and size updates
+ */
+export async function sendMessage(
+    connectionId: string,
+    jsonPayload: Record<string, unknown>,
+    jsonText: string,
+    protoRoot: Root | null,
+    activeMessageName: string,
+    messageState: MessageState,
+    callbacks: SendMessageCallbacks
+): Promise<void> {
     if (!protoRoot || !activeMessageName) {
         callbacks.recordError("Parse the schema and select a oneof first");
         return;
@@ -30,15 +88,29 @@ export async function sendMessage(connectionId, jsonPayload, jsonText, protoRoot
     try {
         const protoBytes = encodeMessagePayload(protoRoot, activeMessageName, jsonPayload);
         const jsonBytes = getUtf8ByteLength(jsonText);
-        callbacks.onSizeUpdate(jsonBytes, protoBytes.length);
+        callbacks.onSizeUpdate?.(jsonBytes, protoBytes.length);
         messageState.lastSendTimestamp = Date.now();
         await sendBinaryMessage(connectionId, bytesToBase64(protoBytes), callbacks);
-    } catch (error) {
+    } catch (error: unknown) {
         callbacks.recordError(error instanceof Error ? error.message : String(error));
     }
 }
 
-export function handleBinaryResponse(base64Data, protoRoot, activeMessageName, messageState, callbacks) {
+/**
+ * Handles a binary response from a WebSocket connection.
+ * @param base64Data - The base64-encoded binary data
+ * @param protoRoot - The protobuf root (may be null if schema not parsed)
+ * @param activeMessageName - The active message type name
+ * @param messageState - The message state to update
+ * @param callbacks - Callbacks for RTT, decoded response, and errors
+ */
+export function handleBinaryResponse(
+    base64Data: string,
+    protoRoot: Root | null,
+    activeMessageName: string,
+    messageState: MessageState,
+    callbacks: BinaryResponseCallbacks
+): void {
     try {
         const bytes = base64ToBytes(base64Data);
         messageState.lastResponseBytes = bytes;
@@ -56,7 +128,7 @@ export function handleBinaryResponse(base64Data, protoRoot, activeMessageName, m
                 const decoded = decodeMessagePayload(protoRoot, activeMessageName, bytes);
                 const jsonText = JSON.stringify(decoded, null, 2);
                 callbacks.onResponseDecoded(jsonText, getUtf8ByteLength(jsonText), bytes.length);
-            } catch (decodeError) {
+            } catch (decodeError: unknown) {
                 callbacks.recordError("Failed to decode payload: " + (decodeError instanceof Error ? decodeError.message : String(decodeError)));
                 callbacks.onResponseRaw("Binary data received but could not decode");
             }
@@ -64,12 +136,17 @@ export function handleBinaryResponse(base64Data, protoRoot, activeMessageName, m
             callbacks.recordError("Proto schema is not ready to decode incoming data");
             callbacks.onResponseRaw("Binary data received but schema not ready");
         }
-    } catch (error) {
+    } catch (error: unknown) {
         callbacks.recordError(error instanceof Error ? error.message : String(error));
     }
 }
 
-export function calculateRTT(messageState) {
+/**
+ * Calculates the round-trip time (RTT) from the last send timestamp.
+ * @param messageState - The message state with send timestamp
+ * @returns An object with rtt and timestamp, or null if no send has occurred
+ */
+export function calculateRTT(messageState: MessageState): { rtt: number; timestamp: string } | null {
     if (!messageState || messageState.lastSendTimestamp <= 0) {
         return null;
     }
@@ -81,7 +158,20 @@ export function calculateRTT(messageState) {
     return { rtt, timestamp };
 }
 
-export function toggleHexView(protoRoot, activeMessageName, messageState, callbacks) {
+/**
+ * Toggles between hex and JSON view of the last response data.
+ * @param protoRoot - The protobuf root (may be null)
+ * @param activeMessageName - The active message type name
+ * @param messageState - The message state with response bytes
+ * @param callbacks - Callbacks for view changes and errors
+ * @returns True if hex view is now active, false otherwise
+ */
+export function toggleHexView(
+    protoRoot: Root | null,
+    activeMessageName: string,
+    messageState: MessageState,
+    callbacks: HexViewCallbacks
+): boolean {
     if (!messageState.lastResponseBytes) {
         callbacks.recordError("No response data available");
         return false;
@@ -98,7 +188,7 @@ export function toggleHexView(protoRoot, activeMessageName, messageState, callba
                 const decoded = decodeMessagePayload(protoRoot, activeMessageName, messageState.lastResponseBytes);
                 const jsonText = JSON.stringify(decoded, null, 2);
                 callbacks.onViewChanged("json", jsonText);
-            } catch (error) {
+            } catch (error: unknown) {
                 callbacks.recordError(error instanceof Error ? error.message : String(error));
             }
         }
