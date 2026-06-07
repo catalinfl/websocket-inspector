@@ -931,3 +931,83 @@
         border-bottom: none;
     }
 }
+
+/* Auto-reconnect toggle switch */
+.auto-reconnect-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--on-surface-variant);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: color 0.15s, background-color 0.15s;
+}
+
+.auto-reconnect-label:hover {
+    color: var(--on-surface);
+    background-color: var(--surface-container-highest);
+}
+
+.auto-reconnect-label .toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.auto-reconnect-label .toggle-switch {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    border-radius: 9px;
+    background-color: var(--outline);
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.auto-reconnect-label .toggle-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: var(--surface);
+    transition: transform 0.2s, background-color 0.2s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.auto-reconnect-label .toggle-input:checked + .toggle-switch {
+    background-color: var(--primary);
+}
+
+.auto-reconnect-label .toggle-input:checked + .toggle-switch::after {
+    transform: translateX(14px);
+    background-color: var(--on-primary);
+}
+
+.auto-reconnect-label .toggle-input:focus-visible + .toggle-switch {
+    outline: 1px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.auto-reconnect-label.is-reconnecting {
+    color: var(--primary);
+}
+
+.auto-reconnect-label.is-reconnecting .toggle-switch {
+    background-color: var(--primary);
+    animation: reconnect-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes reconnect-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
