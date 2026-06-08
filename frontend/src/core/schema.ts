@@ -1,5 +1,5 @@
 import { buildOneofTemplate, parseProtoSchema, type ParsedSchema, type OneofOption } from "./parse";
-import { loadProtoRoot } from "./protobuf";
+import { loadProtoRoot, collectMessageNames } from "./protobuf";
 import type { Root } from "protobufjs";
 
 /**
@@ -23,6 +23,7 @@ export interface SchemaStatus {
     activeMessageName: string;
     hasOneofOptions: boolean;
     oneofOptions: OneofOption[];
+    messageNames: string[];
     validationStatus: string;
     validationMessage: string;
 }
@@ -113,12 +114,17 @@ export function selectOneof(value: string, schemaState: SchemaState): Record<str
  * @returns A SchemaStatus object with derived information
  */
 export function getSchemaStatus(schemaState: SchemaState): SchemaStatus {
+    const messageNames = schemaState.parsedSchema
+        ? Array.from(schemaState.parsedSchema.messages.keys())
+        : [];
+
     return {
         isParsed: !!schemaState.protoRoot,
         protoRoot: schemaState.protoRoot,
         activeMessageName: schemaState.activeMessageName,
         hasOneofOptions: schemaState.oneofOptionMap.size > 0,
         oneofOptions: Array.from(schemaState.oneofOptionMap.values()),
+        messageNames,
         validationStatus: schemaState.validationStatus || "empty",
         validationMessage: schemaState.validationMessage || "",
     };

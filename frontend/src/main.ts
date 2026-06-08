@@ -261,8 +261,8 @@ setupWebSocketListeners({
         }
 
         if (msg.type === "binary") {
-            const { protoRoot, activeMessageName } = getSchemaStatus(connection.schemaState);
-            handleBinaryResponse(String(msg.data), protoRoot, activeMessageName, connection.messageState, {
+            const { protoRoot, activeMessageName, messageNames } = getSchemaStatus(connection.schemaState);
+            handleBinaryResponse(String(msg.data), protoRoot, activeMessageName, messageNames, connection.messageState, {
                 recordError: (errorMsg: string) => recordConnectionError(connection.id, errorMsg, connection, { recordError }),
                 onRTTUpdate: (rtt: number, timestamp: string) => {
                     connection.stats.rtt = rtt;
@@ -540,8 +540,8 @@ if (elements.rawHexButton) {
             return;
         }
 
-        const { protoRoot, activeMessageName } = getSchemaStatus(connection.schemaState);
-        const isActive = toggleHexView(protoRoot, activeMessageName, connection.messageState, {
+        const { protoRoot, activeMessageName, messageNames } = getSchemaStatus(connection.schemaState);
+        const isActive = toggleHexView(protoRoot, activeMessageName, messageNames, connection.messageState, {
             recordError: (message: string) => recordConnectionError(connection.id, message, connection, { recordError }),
             onViewChanged: (viewType: string, content: string) => {
                 connection.responseText = content;

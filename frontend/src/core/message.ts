@@ -1,4 +1,4 @@
-import { verifyMessagePayload, encodeMessagePayload, decodeMessagePayload } from "./protobuf";
+import { verifyMessagePayload, encodeMessagePayload, decodeMessagePayload, tryDecodeWithAllTypes } from "./protobuf";
 import { getUtf8ByteLength, bytesToBase64, base64ToBytes, bytesToHexString } from "../utils";
 import { sendBinaryMessage } from "../services/websocket";
 import type { Root } from "protobufjs";
@@ -98,9 +98,13 @@ export async function sendMessage(
 
 /**
  * Handles a binary response from a WebSocket connection.
+ * Decodes using the active message type first, then falls back to trying
+ * all known message types to find the best match for the received data.
+ *
  * @param base64Data - The base64-encoded binary data
  * @param protoRoot - The protobuf root (may be null if schema not parsed)
- * @param activeMessageName - The active message type name
+ * @param activeMessageName - The active message type name (preferred for decoding)
+ * @param messageNames - All available message type names for fallback decoding
  * @param messageState - The message state to update
  * @param callbacks - Callbacks for RTT, decoded response, and errors
  */
@@ -108,6 +112,7 @@ export function handleBinaryResponse(
     base64Data: string,
     protoRoot: Root | null,
     activeMessageName: string,
+    messageNames: string[],
     messageState: MessageState,
     callbacks: BinaryResponseCallbacks
 ): void {
@@ -116,20 +121,18 @@ export function handleBinaryResponse(
         messageState.lastResponseBytes = bytes;
         messageState.isHexViewActive = false;
 
-        // Update RTT and timestamp
         const rttInfo = calculateRTT(messageState);
         if (rttInfo) {
             callbacks.onRTTUpdate(rttInfo.rtt, rttInfo.timestamp);
         }
 
-        // Try to decode if schema is ready
-        if (protoRoot && activeMessageName) {
-            try {
-                const decoded = decodeMessagePayload(protoRoot, activeMessageName, bytes);
-                const jsonText = JSON.stringify(decoded, null, 2);
+        if (protoRoot && (activeMessageName || messageNames.length > 0)) {
+            const result = tryDecodeWithAllTypes(protoRoot, messageNames, activeMessageName, bytes);
+            if (result) {
+                const jsonText = JSON.stringify(result.decoded, null, 2);
                 callbacks.onResponseDecoded(jsonText, getUtf8ByteLength(jsonText), bytes.length);
-            } catch (decodeError: unknown) {
-                callbacks.recordError("Failed to decode payload: " + (decodeError instanceof Error ? decodeError.message : String(decodeError)));
+            } else {
+                callbacks.recordError("Failed to decode payload: no matching message type found");
                 callbacks.onResponseRaw("Binary data received but could not decode");
             }
         } else {
@@ -162,6 +165,7 @@ export function calculateRTT(messageState: MessageState): { rtt: number; timesta
  * Toggles between hex and JSON view of the last response data.
  * @param protoRoot - The protobuf root (may be null)
  * @param activeMessageName - The active message type name
+ * @param messageNames - All available message type names for fallback decoding
  * @param messageState - The message state with response bytes
  * @param callbacks - Callbacks for view changes and errors
  * @returns True if hex view is now active, false otherwise
@@ -169,6 +173,7 @@ export function calculateRTT(messageState: MessageState): { rtt: number; timesta
 export function toggleHexView(
     protoRoot: Root | null,
     activeMessageName: string,
+    messageNames: string[],
     messageState: MessageState,
     callbacks: HexViewCallbacks
 ): boolean {
@@ -183,13 +188,13 @@ export function toggleHexView(
         const hexText = bytesToHexString(messageState.lastResponseBytes);
         callbacks.onViewChanged("hex", hexText);
     } else {
-        if (protoRoot && activeMessageName) {
-            try {
-                const decoded = decodeMessagePayload(protoRoot, activeMessageName, messageState.lastResponseBytes);
-                const jsonText = JSON.stringify(decoded, null, 2);
+        if (protoRoot) {
+            const result = tryDecodeWithAllTypes(protoRoot, messageNames, activeMessageName, messageState.lastResponseBytes);
+            if (result) {
+                const jsonText = JSON.stringify(result.decoded, null, 2);
                 callbacks.onViewChanged("json", jsonText);
-            } catch (error: unknown) {
-                callbacks.recordError(error instanceof Error ? error.message : String(error));
+            } else {
+                callbacks.recordError("Failed to decode response data");
             }
         }
     }
