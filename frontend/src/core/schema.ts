@@ -1,4 +1,4 @@
-import { buildOneofTemplate, parseProtoSchema, type ParsedSchema, type OneofOption } from "./parse";
+import { buildOneofTemplate, parseProtoSchema, removeIgnoredBlocks, type ParsedSchema, type OneofOption } from "./parse";
 import { loadProtoRoot, collectMessageNames } from "./protobuf";
 import type { Root } from "protobufjs";
 
@@ -75,10 +75,12 @@ export function parseSchema(protoSource: string, schemaState: SchemaState, callb
 
     try {
         const schema = parseProtoSchema(protoSource);
-        const root = loadProtoRoot(protoSource);
+        const cleanSource = removeIgnoredBlocks(protoSource);
+        const root = loadProtoRoot(cleanSource);
         schemaState.parsedSchema = schema;
         schemaState.protoRoot = root;
         schemaState.oneofOptionMap = new Map(schema.oneofOptions.map((option) => [option.value, option]));
+        schemaState.activeMessageName = "";
         schemaState.validationStatus = "valid";
         schemaState.validationMessage = "Schema valid";
         return true;
@@ -86,6 +88,7 @@ export function parseSchema(protoSource: string, schemaState: SchemaState, callb
         schemaState.parsedSchema = null;
         schemaState.protoRoot = null;
         schemaState.oneofOptionMap = new Map();
+        schemaState.activeMessageName = "";
         schemaState.validationStatus = "invalid";
         schemaState.validationMessage = "Schema invalid";
         callbacks.recordError(error instanceof Error ? error.message : String(error));

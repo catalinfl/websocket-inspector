@@ -64,17 +64,66 @@ const scalarDefaults: Map<string, unknown> = new Map<string, unknown>([
 ]);
 
 /**
+ * Detects message names that have a "// IGNORE" comment before them.
+ * Must be called on the original source before stripping comments.
+ * @param source - Raw .proto file content
+ * @returns Set of message names to ignore
+ */
+export function detectIgnoredMessages(source: string): Set<string> {
+    const ignored = new Set<string>();
+    const regex = /^[ \t]*\/\/\s*IGNORE[^\n]*\n[ \t]*message\s+([A-Za-z_][\w]*)\s*\{/gm;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(source)) !== null) {
+        ignored.add(match[1]);
+    }
+
+    return ignored;
+}
+
+/**
+ * Removes message blocks marked with "// IGNORE" from source.
+ * Used to provide a clean source to protobufjs which doesn't understand IGNORE.
+ * @param source - Raw .proto file content
+ * @returns Source with ignored message blocks removed
+ */
+export function removeIgnoredBlocks(source: string): string {
+    const blocks = extractBlocks(source, "message");
+    const ignoreRegex = /^[ \t]*\/\/\s*IGNORE[^\n]*\n[ \t]*message\s+([A-Za-z_][\w]*)\s*\{/gm;
+    const ranges: SourceRange[] = [];
+
+    let m: RegExpExecArray | null;
+    while ((m = ignoreRegex.exec(source)) !== null) {
+        const name = m[1];
+        const block = blocks.find((b) => b.name === name);
+        if (block) {
+            ranges.push({ start: m.index, end: block.end });
+        }
+    }
+
+    if (ranges.length === 0) {
+        return source;
+    }
+
+    return removeRanges(source, ranges);
+}
+
+/**
  * Parses a protobuf schema source string into a structured representation.
  * @param source - Raw .proto file content
  * @returns Parsed schema with messages and oneof options
  */
 export function parseProtoSchema(source: string): ParsedSchema {
+    const ignoredNames = detectIgnoredMessages(source);
     const cleaned = stripProtoComments(source);
     const messageBlocks = extractBlocks(cleaned, "message");
     const messages: Map<string, ProtoMessage> = new Map();
     const oneofOptions: OneofOption[] = [];
 
     for (const block of messageBlocks) {
+        if (ignoredNames.has(block.name)) {
+            continue;
+        }
         const oneofBlocks = extractBlocks(block.body, "oneof");
         const cleanedBody = removeRanges(
             block.body,
